@@ -2,8 +2,8 @@ name: LeetCode Sync
 
 on:
   schedule:
-    - cron: "0 0 * * *"   # runs every day at midnight (UTC)
-  workflow_dispatch:       # allows manual run
+    - cron: "0 0 * * *"   # every midnight UTC
+  workflow_dispatch:
 
 jobs:
   sync:
@@ -17,17 +17,19 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install LeetCode CLI
-        run: pip install leetcode-cli
-
-      - name: Fetch LeetCode submissions
+      - name: Install dependencies
         run: |
-          leetcode user -c ${{ secrets.LEETCODE_COOKIE }} > submissions/leetcode_dump.json
+          pip install requests
+
+      - name: Fetch and save LeetCode submissions
+        run: |
+          mkdir -p solutions
+          python scripts/fetch_leetcode.py
 
       - name: Commit & Push changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add submissions/
-          git commit -m "chore: update LeetCode submissions"
+          git add solutions/
+          git commit -m "chore: update LeetCode solutions" || echo "No changes to commit"
           git push
