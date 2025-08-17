@@ -22,6 +22,9 @@ jobs:
           pip install requests
 
       - name: Fetch and save LeetCode submissions
+        env:
+          LEETCODE_USERNAME: ${{ secrets.LEETCODE_USERNAME }}
+          LEETCODE_PASSWORD: ${{ secrets.LEETCODE_PASSWORD }}
         run: |
           mkdir -p solutions
           python scripts/fetch_leetcode.py
@@ -33,3 +36,4 @@ jobs:
           git add solutions/
           git commit -m "chore: update LeetCode solutions" || echo "No changes to commit"
           git push
+
