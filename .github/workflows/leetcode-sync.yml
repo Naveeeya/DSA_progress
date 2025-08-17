@@ -36,4 +36,3 @@ jobs:
           git add solutions/
           git commit -m "chore: update LeetCode solutions" || echo "No changes to commit"
           git push
-
