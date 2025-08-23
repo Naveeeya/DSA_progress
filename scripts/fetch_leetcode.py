@@ -6,7 +6,7 @@ SOLUTIONS_DIR = Path("solutions")
 SOLUTIONS_DIR.mkdir(parents=True, exist_ok=True)
 
 leetcode_session = os.getenv("LEETCODE_SESSION")
-leetcode_username = os.getenv("LEETCODE_USERNAME")  # just the username (no password needed)
+leetcode_username = os.getenv("LEETCODE_USERNAME")
 
 if not leetcode_session or not leetcode_username:
     raise ValueError("❌ Missing LEETCODE_SESSION or LEETCODE_USERNAME secret")
@@ -21,7 +21,7 @@ session.cookies.set("LEETCODE_SESSION", leetcode_session, domain=".leetcode.com"
 
 print("✅ Using LeetCode session cookie")
 
-# 1. Fetch recent AC submissions
+# Query: recent accepted submissions
 recent_query = """
 query recentAcSubmissions($username: String!) {
   recentAcSubmissionList(username: $username) {
@@ -34,10 +34,10 @@ query recentAcSubmissions($username: String!) {
 }
 """
 
-# 2. Fetch code for a given submission
+# Query: get code for one submission
 code_query = """
-query submissionDetails($id: ID!) {
-  submissionDetails(submissionId: $id) {
+query submissionDetails($submissionId: Int!) {
+  submissionDetails(submissionId: $submissionId) {
     id
     code
     lang
@@ -49,13 +49,19 @@ def fetch_recent_submissions():
     payload = {"query": recent_query, "variables": {"username": leetcode_username}}
     res = session.post("https://leetcode.com/graphql", json=payload)
     res.raise_for_status()
-    return res.json()["data"]["recentAcSubmissionList"]
+    data = res.json()
+    if "errors" in data:
+        raise Exception(f"❌ GraphQL error: {data['errors']}")
+    return data["data"]["recentAcSubmissionList"]
 
 def fetch_submission_code(submission_id):
-    payload = {"query": code_query, "variables": {"id": submission_id}}
+    payload = {"query": code_query, "variables": {"submissionId": int(submission_id)}}
     res = session.post("https://leetcode.com/graphql", json=payload)
     res.raise_for_status()
-    return res.json()["data"]["submissionDetails"]
+    data = res.json()
+    if "errors" in data:
+        raise Exception(f"❌ GraphQL error: {data['errors']}")
+    return data["data"]["submissionDetails"]
 
 def save_solution(sub):
     details = fetch_submission_code(sub["id"])
@@ -80,9 +86,12 @@ def save_solution(sub):
     print(f"✅ Saved {filename}")
 
 def main():
-    submissions = fetch_recent_submissions()
-    for sub in submissions:
-        save_solution(sub)
+    subs = fetch_recent_submissions()
+    for sub in subs:
+        try:
+            save_solution(sub)
+        except Exception as e:
+            print(f"⚠️ Skipped {sub['titleSlug']}: {e}")
 
 if __name__ == "__main__":
     main()
