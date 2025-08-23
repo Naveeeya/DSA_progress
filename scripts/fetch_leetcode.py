@@ -6,39 +6,24 @@ from pathlib import Path
 SOLUTIONS_DIR = Path("solutions")
 SOLUTIONS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Load username/password from GitHub Secrets (or env vars)
-username = os.getenv("LEETCODE_USERNAME")
-password = os.getenv("LEETCODE_PASSWORD")
+# Load session token from GitHub Secrets (env vars)
+leetcode_session = os.getenv("LEETCODE_SESSION")
 
-if not username or not password:
-    raise ValueError("❌ Missing LEETCODE_USERNAME or LEETCODE_PASSWORD secrets")
+if not leetcode_session:
+    raise ValueError("❌ Missing LEETCODE_SESSION secret")
 
 # Start a session
 session = requests.Session()
-session.headers.update({"User-Agent": "Mozilla/5.0"})
+session.headers.update({
+    "User-Agent": "Mozilla/5.0",
+    "Referer": "https://leetcode.com",
+    "Content-Type": "application/json"
+})
+session.cookies.set("LEETCODE_SESSION", leetcode_session, domain=".leetcode.com")
 
-# Step 1: Get CSRF token
-csrf_url = "https://leetcode.com/accounts/login/"
-resp = session.get(csrf_url)
-csrf_token = resp.cookies.get("csrftoken")
-if not csrf_token:
-    raise Exception("❌ Could not fetch CSRF token")
+print("✅ Using LeetCode session cookie")
 
-# Step 2: Login
-login_data = {
-    "csrfmiddlewaretoken": csrf_token,
-    "login": username,
-    "password": password,
-}
-login_headers = {"Referer": csrf_url}
-resp = session.post(csrf_url, data=login_data, headers=login_headers)
-
-if resp.status_code != 200 or "LEETCODE_SESSION" not in session.cookies:
-    raise Exception("❌ Login failed! Check username/password.")
-
-print("✅ Logged into LeetCode successfully")
-
-# Step 3: GraphQL query for submissions
+# GraphQL query for submissions
 query = """
 query submissions($offset: Int!, $limit: Int!) {
   submissionList(offset: $offset, limit: $limit) {
@@ -64,7 +49,6 @@ def save_solution(sub):
     if sub["statusDisplay"] != "Accepted":
         return
 
-    # Map extension by language
     ext_map = {
         "python3": "py", "python": "py",
         "java": "java",
@@ -74,7 +58,6 @@ def save_solution(sub):
     }
     ext = ext_map.get(sub["lang"], "txt")
 
-    # Filename like: two-sum.py (keeps only the latest accepted version)
     filename = f"{sub['titleSlug']}.{ext}"
     filepath = SOLUTIONS_DIR / filename
 
