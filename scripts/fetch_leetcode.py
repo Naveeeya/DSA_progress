@@ -1,97 +1,107 @@
 import os
 import requests
-from pathlib import Path
+import json
 
-SOLUTIONS_DIR = Path("solutions")
-SOLUTIONS_DIR.mkdir(parents=True, exist_ok=True)
+LEETCODE_SESSION = os.getenv("LEETCODE_SESSION")
+LEETCODE_USERNAME = os.getenv("LEETCODE_USERNAME")
 
-leetcode_session = os.getenv("LEETCODE_SESSION")
-leetcode_username = os.getenv("LEETCODE_USERNAME")
-
-if not leetcode_session or not leetcode_username:
+if not LEETCODE_SESSION or not LEETCODE_USERNAME:
     raise ValueError("❌ Missing LEETCODE_SESSION or LEETCODE_USERNAME secret")
-
-session = requests.Session()
-session.headers.update({
-    "User-Agent": "Mozilla/5.0",
-    "Referer": "https://leetcode.com",
-    "Content-Type": "application/json"
-})
-session.cookies.set("LEETCODE_SESSION", leetcode_session, domain=".leetcode.com")
 
 print("✅ Using LeetCode session cookie")
 
-# Query: recent accepted submissions
-recent_query = """
-query recentAcSubmissions($username: String!) {
-  recentAcSubmissionList(username: $username) {
-    id
-    title
-    titleSlug
-    lang
-    timestamp
+BASE_URL = "https://leetcode.com/graphql"
+HEADERS = {
+    "Content-Type": "application/json",
+    "Cookie": f"LEETCODE_SESSION={LEETCODE_SESSION}",
+    "Referer": "https://leetcode.com",
+}
+
+# Query submissions list
+SUBMISSIONS_QUERY = """
+query submissions($username: String!, $offset: Int!, $limit: Int!) {
+  submissionList(
+    username: $username,
+    offset: $offset,
+    limit: $limit,
+  ) {
+    submissions {
+      id
+      title
+      titleSlug
+      statusDisplay
+      lang
+      timestamp
+    }
   }
 }
 """
 
-# Query: get code for one submission
-code_query = """
-query submissionDetails($submissionId: Int!) {
-  submissionDetails(submissionId: $submissionId) {
-    id
+# Query single submission details
+SUBMISSION_DETAIL_QUERY = """
+query submissionDetails($id: ID!) {
+  submissionDetail(submissionId: $id) {
     code
     lang
   }
 }
 """
 
-def fetch_recent_submissions():
-    payload = {"query": recent_query, "variables": {"username": leetcode_username}}
-    res = session.post("https://leetcode.com/graphql", json=payload)
+def fetch_submissions(offset=0, limit=20):
+    res = requests.post(
+        BASE_URL,
+        headers=HEADERS,
+        json={"query": SUBMISSIONS_QUERY,
+              "variables": {"username": LEETCODE_USERNAME, "offset": offset, "limit": limit}},
+    )
     res.raise_for_status()
-    data = res.json()
-    if "errors" in data:
-        raise Exception(f"❌ GraphQL error: {data['errors']}")
-    return data["data"]["recentAcSubmissionList"]
+    return res.json()["data"]["submissionList"]["submissions"]
 
 def fetch_submission_code(submission_id):
-    payload = {"query": code_query, "variables": {"submissionId": int(submission_id)}}
-    res = session.post("https://leetcode.com/graphql", json=payload)
+    res = requests.post(
+        BASE_URL,
+        headers=HEADERS,
+        json={"query": SUBMISSION_DETAIL_QUERY, "variables": {"id": submission_id}},
+    )
     res.raise_for_status()
-    data = res.json()
-    if "errors" in data:
-        raise Exception(f"❌ GraphQL error: {data['errors']}")
-    return data["data"]["submissionDetails"]
+    return res.json()["data"]["submissionDetail"]
 
 def save_solution(sub):
-    details = fetch_submission_code(sub["id"])
-    code = details["code"]
+    if sub["statusDisplay"] != "Accepted":
+        return  # skip non-AC
+
+    try:
+        details = fetch_submission_code(sub["id"])
+    except requests.exceptions.HTTPError:
+        print(f"⚠️ Skipped {sub['titleSlug']}: 400 Bad Request")
+        return
+
     lang = details["lang"]
+    code = details["code"]
 
     ext_map = {
-        "python3": "py", "python": "py",
+        "python3": "py",
         "java": "java",
         "cpp": "cpp",
         "c": "c",
         "javascript": "js",
+        "typescript": "ts",
     }
-    ext = ext_map.get(lang, "txt")
+    ext = ext_map.get(lang.lower(), "txt")
 
-    filename = f"{sub['titleSlug']}.{ext}"
-    filepath = SOLUTIONS_DIR / filename
-
-    with open(filepath, "w", encoding="utf-8") as f:
+    os.makedirs("solutions", exist_ok=True)
+    filename = f"solutions/{sub['titleSlug']}.{ext}"
+    with open(filename, "w", encoding="utf-8") as f:
         f.write(code)
 
-    print(f"✅ Saved {filename}")
+    print(f"✅ Saved {sub['titleSlug']}")
 
 def main():
-    subs = fetch_recent_submissions()
-    for sub in subs:
-        try:
-            save_solution(sub)
-        except Exception as e:
-            print(f"⚠️ Skipped {sub['titleSlug']}: {e}")
+    offset = 0
+    limit = 20
+    submissions = fetch_submissions(offset, limit)
+    for sub in submissions:
+        save_solution(sub)
 
 if __name__ == "__main__":
     main()
