@@ -26,7 +26,7 @@ jobs:
           LEETCODE_USERNAME: ${{ secrets.LEETCODE_USERNAME }}
           LEETCODE_PASSWORD: ${{ secrets.LEETCODE_PASSWORD }}
         run: |
-          mkdir -p solutions
+          touch -p solutions
           python scripts/fetch_leetcode.py
 
       - name: Commit & Push changes
