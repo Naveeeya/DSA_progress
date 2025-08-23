@@ -23,8 +23,7 @@ jobs:
 
       - name: Fetch and save LeetCode submissions
         env:
-          LEETCODE_USERNAME: ${{ secrets.LEETCODE_USERNAME }}
-          LEETCODE_PASSWORD: ${{ secrets.LEETCODE_PASSWORD }}
+          LEETCODE_SESSION: ${{ secrets.LEETCODE_SESSION }}
         run: |
           mkdir -p solutions
           python scripts/fetch_leetcode.py
